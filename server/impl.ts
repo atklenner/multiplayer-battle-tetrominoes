@@ -37,6 +37,12 @@ export class Impl implements Methods<InternalState> {
     ctx: Context,
     request: IJoinGameRequest
   ): Response {
+    if (state.hands.find((hand) => hand.userId === userId)) {
+      return Response.error("Already joined");
+    }
+    if (state.pile !== undefined) {
+      return Response.error("Game in progress");
+    }
     state.hands.push({ userId, cards: [] });
     return Response.ok();
   }
@@ -46,6 +52,12 @@ export class Impl implements Methods<InternalState> {
     ctx: Context,
     request: IStartGameRequest
   ): Response {
+    if (state.pile !== undefined) {
+      return Response.error("Already started");
+    }
+    if (state.hands.length === 0) {
+      return Response.error("At least one player required");
+    }
     state.hands = ctx.chance.shuffle(state.hands);
     state.deck = ctx.chance.shuffle(state.deck);
     state.hands.forEach((hand) => {
@@ -62,7 +74,20 @@ export class Impl implements Methods<InternalState> {
     ctx: Context,
     request: IPlayCardRequest
   ): Response {
-    const { cards } = state.hands[state.turnIdx];
+    if (state.pile === undefined) {
+      return Response.error("Game not started");
+    }
+    const hand = state.hands[state.turnIdx];
+    if (hand.userId !== userId) {
+      return Response.error("Not your turn");
+    }
+    if (
+      request.card.color !== state.pile.color &&
+      request.card.value !== state.pile.value
+    ) {
+      return Response.error("Doesn't match top of pile");
+    }
+    const cards = hand.cards;
     const cardIdx = cards.findIndex(
       (card) =>
         card.value == request.card.value && card.color == request.card.color
@@ -81,9 +106,15 @@ export class Impl implements Methods<InternalState> {
     ctx: Context,
     request: IDrawCardRequest
   ): Response {
+    if (state.pile === undefined) {
+      return Response.error("Game not started");
+    }
     const hand = state.hands[state.turnIdx];
     if (hand.userId !== userId) {
-      return Response.error("Not your turn!");
+      return Response.error("Not your turn");
+    }
+    if (state.deck.length === 0) {
+      return Response.error("Deck is empty");
     }
     hand.cards.push(state.deck.pop()!);
     return Response.ok();
